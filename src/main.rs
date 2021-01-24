@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::{Less, Greater, Equal};
 use itertools::Itertools;
 use std::path::PathBuf;
+use walkdir::WalkDir;
 use clap::Clap;
 
 extern "C" {
@@ -87,12 +88,13 @@ fn main() {
 
     let opts: Opts = Opts::parse();
 
+    let cache_dir = format!("{}/", opts.cachedir);
+
     let re = Regex::new(r"^(?P<name>.*)-(?P<version>[^-]*-[^-]*)-[^-]*$").unwrap();
-    let paths = fs::read_dir(&opts.cachedir).unwrap();
-    let pkg_infos: Vec<PkgFile> = paths.filter_map(|path| {
-        let pp = path.unwrap();
-        let filename = pp.file_name().to_str().unwrap().to_owned();
-        let path = pp.path();
+
+    let pkg_infos: Vec<PkgFile> = WalkDir::new(&cache_dir).into_iter().filter_map(|e| e.ok()).filter_map(|entry| {
+        let path = entry.path();
+        let filename = path.file_name().unwrap().to_str().unwrap().to_owned();
         match re.captures(&filename) {
             None => None,
             Some(c) => {
@@ -106,7 +108,7 @@ fn main() {
                 };
                 let pkg_file = PkgFile {
                     pkg_info,
-                    path_buf: path,
+                    path_buf: path.to_path_buf(),
                 };
                 Some(pkg_file)
             }
@@ -119,7 +121,8 @@ fn main() {
         let pkg_files = pkg_files.collect_vec();
         for pkg_file in pkg_files.iter().rev().skip(opts.keep) {
             if opts.verbose {
-                println!("{}", pkg_file.path_buf.file_name().unwrap().to_str().unwrap());
+                let deletion_candidate = pkg_file.path_buf.to_str().unwrap().strip_prefix(&cache_dir).unwrap();
+                println!("{}", &deletion_candidate);
             }
             file_size += pkg_file.path_buf.metadata().expect("Unable to fetch file metadata").len();
             num_candidates += 1;
