@@ -128,6 +128,19 @@ fn pkg_files(cache_dir: &str) -> Vec<PkgFile> {
     }).sorted_unstable().collect()
 }
 
+fn vercmp(a: &str, b: &str) -> Ordering {
+    let s1 = CString::new(a).unwrap();
+    let s2 = CString::new(b).unwrap();
+    unsafe {
+        match alpm_pkg_vercmp(s1.as_ptr(), s2.as_ptr()) {
+            -1 => Less,
+            0 => Equal,
+            1 => Greater,
+            e => panic!("Unexpected comparison result: {}", e)
+        }
+    }
+}
+
 fn size_to_human_readable(size_in_bytes: u64) -> String {
     let exponent = ((size_in_bytes as f64).log2() / 10.0) as u32;
     let (unit, too_large) = match exponent {
@@ -147,18 +160,6 @@ fn size_to_human_readable(size_in_bytes: u64) -> String {
     } else {
         let quantity = (size_in_bytes as f64) / ((1024u64).pow(exponent) as f64);
         format!("{:.2} {}", quantity, unit)
-    }
-}
-fn vercmp(a: &str, b: &str) -> Ordering {
-    let s1 = CString::new(a).unwrap();
-    let s2 = CString::new(b).unwrap();
-    unsafe {
-        match alpm_pkg_vercmp(s1.as_ptr(), s2.as_ptr()) {
-            -1 => Less,
-            0 => Equal,
-            1 => Greater,
-            e => panic!("Unexpected comparison result: {}", e)
-        }
     }
 }
 
