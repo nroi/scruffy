@@ -1,3 +1,8 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
 /**
  * All code in this file originates from pacman's lib/libalpm/version.c
  */
@@ -142,5 +147,86 @@ int rpmvercmp(const char *a, const char *b)
     cleanup:
     free(str1);
     free(str2);
+    return ret;
+}
+
+void parseEVR(char *evr, const char **ep, const char **vp,
+              const char **rp)
+{
+    const char *epoch;
+    const char *version;
+    const char *release;
+    char *s, *se;
+
+    s = evr;
+    /* s points to epoch terminator */
+    while (*s && isdigit(*s)) s++;
+    /* se points to version terminator */
+    se = strrchr(s, '-');
+
+    if(*s == ':') {
+        epoch = evr;
+        *s++ = '\0';
+        version = s;
+        if(*epoch == '\0') {
+            epoch = "0";
+        }
+    } else {
+        /* different from RPM- always assume 0 epoch */
+        epoch = "0";
+        version = evr;
+    }
+    if(se) {
+        *se++ = '\0';
+        release = se;
+    } else {
+        release = NULL;
+    }
+
+    if(ep) *ep = epoch;
+    if(vp) *vp = version;
+    if(rp) *rp = release;
+}
+
+int alpm_pkg_vercmp(const char *a, const char *b)
+{
+    char *full1, *full2;
+    const char *epoch1, *ver1, *rel1;
+    const char *epoch2, *ver2, *rel2;
+    int ret;
+
+    /* ensure our strings are not null */
+    if(!a && !b) {
+        return 0;
+    } else if(!a) {
+        return -1;
+    } else if(!b) {
+        return 1;
+    }
+    /* another quick shortcut- if full version specs are equal */
+    if(strcmp(a, b) == 0) {
+        return 0;
+    }
+
+    /* Parse both versions into [epoch:]version[-release] triplets. We probably
+     * don't need epoch and release to support all the same magic, but it is
+     * easier to just run it all through the same code. */
+    full1 = strdup(a);
+    full2 = strdup(b);
+
+    /* parseEVR modifies passed in version, so have to dupe it first */
+    parseEVR(full1, &epoch1, &ver1, &rel1);
+    parseEVR(full2, &epoch2, &ver2, &rel2);
+
+    ret = rpmvercmp(epoch1, epoch2);
+    if(ret == 0) {
+        ret = rpmvercmp(ver1, ver2);
+        if(ret == 0 && rel1 && rel2) {
+            ret = rpmvercmp(rel1, rel2);
+        }
+    }
+
+    free(full1);
+    free(full2);
     return ret;
 }
