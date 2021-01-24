@@ -18,7 +18,7 @@ extern "C" {
 #[derive(Clap)]
 #[clap()]
 struct Opts {
-    /// The cache directory. This option can be used more than once.
+    /// The cache directory. This directory will be searched recursively.
     #[clap(short, long)]
     cachedir: String,
     /// verbose mode
@@ -30,19 +30,6 @@ struct Opts {
     /// Specify how many versions of each package are kept in the cache directory.
     #[clap(short, long, default_value = "3")]
     keep: usize,
-}
-
-fn vercmp(a: &str, b: &str) -> Ordering {
-    let s1 = CString::new(a).unwrap();
-    let s2 = CString::new(b).unwrap();
-    unsafe {
-        match alpm_pkg_vercmp(s1.as_ptr(), s2.as_ptr()) {
-            -1 => Less,
-            0 => Equal,
-            1 => Greater,
-            e => panic!("Unexpected comparison result: {}", e)
-        }
-    }
 }
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
@@ -87,39 +74,13 @@ struct PkgInfo  {
 }
 
 fn main() {
-
     let opts: Opts = Opts::parse();
-
     let cache_dir = format!("{}/", opts.cachedir);
-
-    let re = Regex::new(r"^(?P<name>.*)-(?P<version>[^-]*-[^-]*)-[^-]*$").unwrap();
-
-    let pkg_infos: Vec<PkgFile> = WalkDir::new(&cache_dir).into_iter().filter_map(|e| e.ok()).filter_map(|entry| {
-        let path = entry.path();
-        let filename = path.file_name().unwrap().to_str().unwrap().to_owned();
-        match re.captures(&filename) {
-            None => None,
-            Some(c) => {
-                let name = c.name("name").unwrap().as_str().to_owned();
-                let version = c.name("version").unwrap().as_str().to_owned();
-                let pkg_info = PkgInfo {
-                    name,
-                    version: PkgVersion {
-                        version
-                    }
-                };
-                let pkg_file = PkgFile {
-                    pkg_info,
-                    path_buf: path.to_path_buf(),
-                };
-                Some(pkg_file)
-            }
-        }
-    }).sorted_unstable().collect();
+    let pkg_files = pkg_files(&cache_dir);
 
     let mut file_size = 0;
     let mut num_candidates = 0;
-    for (_, pkg_files) in &pkg_infos.iter().group_by(|p| &p.pkg_info.name) {
+    for (_, pkg_files) in &pkg_files.iter().group_by(|p| &p.pkg_info.name) {
         let pkg_files = pkg_files.collect_vec();
         for pkg_file in pkg_files.iter().rev().skip(opts.keep) {
             if opts.verbose {
@@ -145,7 +106,29 @@ fn main() {
     }
 }
 
-pub fn size_to_human_readable(size_in_bytes: u64) -> String {
+fn pkg_files(cache_dir: &str) -> Vec<PkgFile> {
+    let re = Regex::new(r"^(?P<name>.*)-(?P<version>[^-]*-[^-]*)-[^-]*$").unwrap();
+    WalkDir::new(&cache_dir).into_iter().filter_map(|e| e.ok()).filter_map(|entry| {
+        let path = entry.path();
+        let filename = path.file_name().unwrap().to_str().unwrap().to_owned();
+        re.captures(&filename).map(|c| {
+            let name = c.name("name").unwrap().as_str().to_owned();
+            let version = c.name("version").unwrap().as_str().to_owned();
+            let pkg_info = PkgInfo {
+                name,
+                version: PkgVersion {
+                    version
+                }
+            };
+            PkgFile {
+                pkg_info,
+                path_buf: path.to_path_buf(),
+            }
+        })
+    }).sorted_unstable().collect()
+}
+
+fn size_to_human_readable(size_in_bytes: u64) -> String {
     let exponent = ((size_in_bytes as f64).log2() / 10.0) as u32;
     let (unit, too_large) = match exponent {
         0 => ("B", false),
@@ -166,3 +149,16 @@ pub fn size_to_human_readable(size_in_bytes: u64) -> String {
         format!("{:.2} {}", quantity, unit)
     }
 }
+fn vercmp(a: &str, b: &str) -> Ordering {
+    let s1 = CString::new(a).unwrap();
+    let s2 = CString::new(b).unwrap();
+    unsafe {
+        match alpm_pkg_vercmp(s1.as_ptr(), s2.as_ptr()) {
+            -1 => Less,
+            0 => Equal,
+            1 => Greater,
+            e => panic!("Unexpected comparison result: {}", e)
+        }
+    }
+}
+
