@@ -18,4 +18,5 @@ fn main() {
     println!("d = {}", d);
     println!("e = {}", e);
     println!("f = {}", f);
+
 }
