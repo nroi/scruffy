@@ -9,9 +9,24 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::{Less, Greater, Equal};
 use itertools::Itertools;
 use std::path::PathBuf;
+use clap::Clap;
 
 extern "C" {
     fn alpm_pkg_vercmp(a: *const c_char, b: *const c_char) -> i32;
+}
+
+#[derive(Clap)]
+#[clap()]
+struct Opts {
+    /// The cache directory. This option can be used more than once.
+    #[clap(short, long)]
+    cachedir: String,
+    /// verbose mode
+    #[clap(short, long)]
+    verbose: bool,
+    /// Specify how many versions of each package are kept in the cache directory.
+    #[clap(short, long, default_value = "3")]
+    keep: usize,
 }
 
 fn vercmp(a: &str, b: &str) -> Ordering {
@@ -70,12 +85,10 @@ struct PkgInfo  {
 
 fn main() {
 
-    let args: Vec<String> = env::args().collect();
-    let path = &args[1];
-    let keep = args[2].parse::<usize>().unwrap();
+    let opts: Opts = Opts::parse();
 
     let re = Regex::new(r"^(?P<name>.*)-(?P<version>[^-]*-[^-]*)-[^-]*$").unwrap();
-    let paths = fs::read_dir(path).unwrap();
+    let paths = fs::read_dir(&opts.cachedir).unwrap();
     let pkg_infos: Vec<PkgFile> = paths.filter_map(|path| {
         let pp = path.unwrap();
         let filename = pp.file_name().to_str().unwrap().to_owned();
@@ -104,15 +117,19 @@ fn main() {
     let mut num_candidates = 0;
     for (_, pkg_files) in &pkg_infos.iter().group_by(|p| &p.pkg_info.name) {
         let pkg_files = pkg_files.collect_vec();
-        for pkg_file in pkg_files.iter().rev().skip(keep) {
-            println!("{}", pkg_file.path_buf.file_name().unwrap().to_str().unwrap());
+        for pkg_file in pkg_files.iter().rev().skip(opts.keep) {
+            if opts.verbose {
+                println!("{}", pkg_file.path_buf.file_name().unwrap().to_str().unwrap());
+            }
             file_size += pkg_file.path_buf.metadata().expect("Unable to fetch file metadata").len();
             num_candidates += 1;
         }
     }
 
-    println!("num candidates: {}", num_candidates);
-    println!("file size: {}", size_to_human_readable(file_size));
+    if opts.verbose {
+        println!("num candidates: {}", num_candidates);
+        println!("file size: {}", size_to_human_readable(file_size));
+    }
 }
 
 pub fn size_to_human_readable(size_in_bytes: u64) -> String {
