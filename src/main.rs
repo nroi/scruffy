@@ -3,7 +3,6 @@ extern crate libc;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::fs;
-use std::env;
 use regex::Regex;
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Less, Greater, Equal};
@@ -25,6 +24,9 @@ struct Opts {
     /// verbose mode
     #[clap(short, long)]
     verbose: bool,
+    /// Perform a dry run, only finding candidate packages.
+    #[clap(short, long)]
+    dryrun: bool,
     /// Specify how many versions of each package are kept in the cache directory.
     #[clap(short, long, default_value = "3")]
     keep: usize,
@@ -126,12 +128,20 @@ fn main() {
             }
             file_size += pkg_file.path_buf.metadata().expect("Unable to fetch file metadata").len();
             num_candidates += 1;
+            if !opts.dryrun {
+                fs::remove_file(&pkg_file.path_buf).unwrap();
+            }
         }
     }
 
+    let prefix = if opts.dryrun {
+        "[dry run] "
+    } else {
+        ""
+    };
     if opts.verbose {
-        println!("num candidates: {}", num_candidates);
-        println!("file size: {}", size_to_human_readable(file_size));
+        println!("\n{}{} packages removed (disk space saved: {})",
+                 prefix, num_candidates, size_to_human_readable(file_size));
     }
 }
 
