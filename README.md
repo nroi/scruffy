@@ -10,11 +10,11 @@ and therefore don't have pacman installed. Existing tools, such as
 require pacman/libalpm and therefore cannot be installed (without much effort) on alternative Linux distros.
 
 In particular, the docker image of [Flexo](https://github.com/nroi/flexo), which is currently based
-on Debian, will be using this tool in the future.
+on Debian, uses this tool.
 
 ## Build
 
-Cargo is required to build the tool:
+Cargo is required to build scruffy:
 
 ```
 cargo build --release
