@@ -108,7 +108,21 @@ fn main() {
 
 fn pkg_files(cache_dir: &str) -> Vec<PkgFile> {
     let re = Regex::new(r"^(?P<name>.*)-(?P<version>[^-]*-[^-]*)-[^-]*$").unwrap();
-    WalkDir::new(&cache_dir).into_iter().filter_map(|e| e.ok()).filter_map(|entry| {
+    WalkDir::new(&cache_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|entry| {
+            let ignore_file = match entry.path().extension() {
+                None => false,
+                Some(ext) => {
+                    // Both CFS files and signature files are ignored, because this function should return
+                    // only real package files.
+                    ext.eq_ignore_ascii_case("cfs") || ext.eq_ignore_ascii_case("sig")
+                }
+            };
+            !ignore_file
+        })
+        .filter_map(|entry| {
         let path = entry.path();
         let filename = path.file_name().unwrap().to_str().unwrap().to_owned();
         re.captures(&filename).map(|c| {
